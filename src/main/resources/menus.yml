@@ -1,0 +1,69 @@
+# BMenus configuration
+#
+# Buttons may define commands with interactive arguments using the format:
+#   command: "base {\"Title\", Type} {\"Another\", Type, \"Options\"}"
+# Supported argument types:
+#   Input       - {"Prompt", Input}
+#   Dropdown    - {"Prompt", Dropdown, "Option1, Option2"}
+#   PlayerList  - {"Prompt", PlayerList}  # lists online players
+#   Toggle      - {"Prompt", Toggle}
+#   Slider      - {"Prompt", Slider, "min, max, step"}
+#   StepSlider  - {"Prompt", StepSlider, "Step1, Step2"}
+#
+# Example:
+#   command: "example {\"Type Text:\", Input} {\"Who do you want?\", PlayerList} {\"True or False?\", Toggle}"
+#
+# Usage settings:
+#   flush-interval-seconds - how often command usage is saved
+#   max-commands          - maximum commands stored per player
+#   expiry-seconds        - drop commands unused for this long
+#
+# Default commands shown in the per-player "Common" menu when no usage is recorded.
+defaults:
+  common:
+    - "/spawn"
+    - "/wild"
+    - "sethome {\"Home Name:\", Input}"
+    - "home {\"Home Name:\", Input}"
+    - "/lands"
+    - "/rankup"
+    - "vot {\"Choose an option:\", Dropdown, \"Day, Night, Clear, Sun, Raining, Thunder\"}"
+    - "/vot yes"
+    - "/vot no"
+    - "/rules"
+
+usage:
+  flush-interval-seconds: 300
+  max-commands: 50
+  expiry-seconds: 604800
+
+menus:
+  main:
+    type: simple
+    title: "BM Commands"
+    content: "Select a category"
+    buttons:
+      - text: "Teleportation"
+        menu: "teleportation"
+      - text: "Common"
+        menu: "common"
+  teleportation:
+    type: simple
+    title: "Teleportation"
+    buttons:
+      - text: "spawn"
+        command: "spawn"
+      - text: "tpa"
+        command: "tpa {\"Who do you want?\", PlayerList}"
+      - text: "example"
+        command: "example {\"Type Text:\", Input} {\"Who do you want?\", PlayerList} {\"True or False?\", Toggle}"
+      - text: "Set Home"
+        menu: "sethome_form"
+  common:
+    type: simple
+    title: "Common"
+    buttons: []
+  sethome_form:
+    type: custom
+    title: "Set Home"
+    command: "sethome {\"Home Name:\", Input}"
