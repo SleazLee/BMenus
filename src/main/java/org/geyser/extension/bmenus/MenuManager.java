@@ -3,8 +3,8 @@ package org.geyser.extension.bmenus;
 import org.geysermc.cumulus.form.CustomForm;
 import org.geysermc.cumulus.form.SimpleForm;
 import org.geysermc.geyser.api.GeyserApi;
+import org.geysermc.geyser.api.connection.GeyserConnection;
 import org.geysermc.geyser.api.extension.Extension;
-import org.geysermc.geyser.api.player.GeyserPlayer;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
@@ -108,24 +108,24 @@ public class MenuManager {
     /**
      * Opens a menu with the given id for the player.
      */
-    public void openMenu(GeyserPlayer player, String id) {
+    public void openMenu(GeyserConnection connection, String id) {
         Menu menu = menus.get(id);
         if (menu == null) {
             extension.logger().warning("Menu " + id + " not found");
             return;
         }
         if ("common".equalsIgnoreCase(id)) {
-            openCommon(player, menu);
+            openCommon(connection, menu);
             return;
         }
         if ("simple".equalsIgnoreCase(menu.type)) {
-            openSimple(player, menu);
+            openSimple(connection, menu);
         } else if ("custom".equalsIgnoreCase(menu.type)) {
-            openCustom(player, menu);
+            openCustom(connection, menu);
         }
     }
 
-    private void openSimple(GeyserPlayer player, Menu menu) {
+    private void openSimple(GeyserConnection connection, Menu menu) {
         SimpleForm.Builder builder = SimpleForm.builder()
                 .title(menu.title);
         if (menu.content != null) {
@@ -137,26 +137,26 @@ public class MenuManager {
         builder.validResultHandler((form, response) -> {
             int index = response.clickedButtonId();
             if (index >= 0 && index < menu.buttons.size()) {
-                handleButton(player, menu.buttons.get(index));
+                handleButton(connection, menu.buttons.get(index));
             }
         });
-        player.sendForm(builder.build());
+        connection.sendForm(builder.build());
     }
 
-    private void openCommon(GeyserPlayer player, Menu menu) {
-        LinkedHashMap<String, Integer> map = usage.computeIfAbsent(player.uuid(), uuid -> {
+    private void openCommon(GeyserConnection connection, Menu menu) {
+        LinkedHashMap<String, Integer> map = usage.computeIfAbsent(connection.playerUuid(), uuid -> {
             LinkedHashMap<String, Integer> defaults = new LinkedHashMap<>();
             for (String def : defaultCommands) {
                 defaults.put(def, 0);
             }
             return defaults;
         });
-        Map<String, Long> times = usageTimes.computeIfAbsent(player.uuid(), uuid -> new HashMap<>());
+        Map<String, Long> times = usageTimes.computeIfAbsent(connection.playerUuid(), uuid -> new HashMap<>());
         for (String def : defaultCommands) {
             map.putIfAbsent(def, 0);
             times.putIfAbsent(def, 0L);
         }
-        cleanupUsage(player.uuid(), map, times);
+        cleanupUsage(connection.playerUuid(), map, times);
 
         List<Map.Entry<String, Integer>> entries = new ArrayList<>(map.entrySet());
         entries.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
@@ -173,38 +173,38 @@ public class MenuManager {
         builder.validResultHandler((form, response) -> {
             int index = response.clickedButtonId();
             if (index >= 0 && index < commands.size()) {
-                runCommandTemplate(player, toLabel(commands.get(index)), commands.get(index));
+                runCommandTemplate(connection, toLabel(commands.get(index)), commands.get(index));
             }
         });
 
-        player.sendForm(builder.build());
+        connection.sendForm(builder.build());
     }
 
-    private void handleButton(GeyserPlayer player, MenuButton button) {
+    private void handleButton(GeyserConnection connection, MenuButton button) {
         if (button.menu != null) {
-            openMenu(player, button.menu);
+            openMenu(connection, button.menu);
         } else if (button.command != null) {
-            runCommandTemplate(player, button.text, button.command);
+            runCommandTemplate(connection, button.text, button.command);
         }
     }
 
-    private void openCustom(GeyserPlayer player, Menu menu) {
+    private void openCustom(GeyserConnection connection, Menu menu) {
         if (menu.command != null) {
-            runCommandTemplate(player, menu.title, menu.command);
+            runCommandTemplate(connection, menu.title, menu.command);
         }
     }
 
-    private void runCommandTemplate(GeyserPlayer player, String title, String command) {
+    private void runCommandTemplate(GeyserConnection connection, String title, String command) {
         CommandTemplate template = CommandTemplate.parse(command, extension);
         if (template.arguments.isEmpty()) {
-            recordCommandUsage(player, template.raw);
-            execute(player, template.raw);
+            recordCommandUsage(connection, template.raw);
+            execute(connection, template.raw);
         } else {
-            openCommandForm(player, title, template);
+            openCommandForm(connection, title, template);
         }
     }
 
-    private void openCommandForm(GeyserPlayer player, String title, CommandTemplate template) {
+    private void openCommandForm(GeyserConnection connection, String title, CommandTemplate template) {
         CustomForm.Builder builder = CustomForm.builder().title(title);
         List<List<String>> optionLists = new ArrayList<>();
 
@@ -258,41 +258,41 @@ public class MenuManager {
                 index++;
             }
             String cmd = template.build(values);
-            recordCommandUsage(player, template.raw);
-            execute(player, cmd);
+            recordCommandUsage(connection, template.raw);
+            execute(connection, cmd);
         });
 
-        player.sendForm(builder.build());
+        connection.sendForm(builder.build());
     }
 
     private List<String> getOnlinePlayerNames() {
         GeyserApi api = extension.geyserApi();
         List<String> names = new ArrayList<>();
-        for (GeyserPlayer online : api.onlinePlayers()) {
+        for (GeyserConnection online : api.onlineConnections()) {
             names.add(online.name());
         }
         return names;
     }
 
-    private void execute(GeyserPlayer player, String command) {
+    private void execute(GeyserConnection connection, String command) {
         if (command.startsWith("/")) {
             command = command.substring(1);
         }
-        player.executeCommand(command);
+        connection.sendCommand(command);
     }
 
-    private void recordCommandUsage(GeyserPlayer player, String command) {
-        LinkedHashMap<String, Integer> map = usage.computeIfAbsent(player.uuid(), uuid -> {
+    private void recordCommandUsage(GeyserConnection connection, String command) {
+        LinkedHashMap<String, Integer> map = usage.computeIfAbsent(connection.playerUuid(), uuid -> {
             LinkedHashMap<String, Integer> defaults = new LinkedHashMap<>();
             for (String def : defaultCommands) {
                 defaults.put(def, 0);
             }
             return defaults;
         });
-        Map<String, Long> times = usageTimes.computeIfAbsent(player.uuid(), uuid -> new HashMap<>());
+        Map<String, Long> times = usageTimes.computeIfAbsent(connection.playerUuid(), uuid -> new HashMap<>());
         map.merge(command, 1, Integer::sum);
         times.put(command, System.currentTimeMillis());
-        cleanupUsage(player.uuid(), map, times);
+        cleanupUsage(connection.playerUuid(), map, times);
     }
 
     private String toLabel(String command) {
