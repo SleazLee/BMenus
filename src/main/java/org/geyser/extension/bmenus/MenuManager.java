@@ -275,7 +275,7 @@ public class MenuManager {
                 index++;
             }
             String cmd = template.build(values);
-            recordCommandUsage(connection, template.raw);
+            recordCommandUsage(connection, cmd);
             execute(connection, cmd);
         });
 
