@@ -61,6 +61,20 @@ public class MenuManager {
                 menus.put(entry.getKey(), Menu.fromMap((Map<String, Object>) entry.getValue()));
             }
 
+            Menu mainMenu = menus.get("main");
+            if (mainMenu != null) {
+                for (int i = 0; i < mainMenu.buttons.size(); i++) {
+                    MenuButton button = mainMenu.buttons.get(i);
+                    if ("common".equalsIgnoreCase(button.menu)) {
+                        if (i != 0) {
+                            mainMenu.buttons.remove(i);
+                            mainMenu.buttons.add(0, button);
+                        }
+                        break;
+                    }
+                }
+            }
+
             Map<String, Object> defaults = (Map<String, Object>) root.get("defaults");
             if (defaults != null) {
                 List<String> common = (List<String>) defaults.get("common");
@@ -151,11 +165,14 @@ public class MenuManager {
             }
             return defaults;
         });
-        Map<String, Long> times = usageTimes.computeIfAbsent(connection.playerUuid(), uuid -> new HashMap<>());
-        for (String def : defaultCommands) {
-            map.putIfAbsent(def, 0);
-            times.putIfAbsent(def, 0L);
-        }
+        Map<String, Long> times = usageTimes.computeIfAbsent(connection.playerUuid(), uuid -> {
+            Map<String, Long> defaults = new HashMap<>();
+            for (String def : defaultCommands) {
+                defaults.put(def, 0L);
+            }
+            return defaults;
+        });
+
         cleanupUsage(connection.playerUuid(), map, times);
 
         List<Map.Entry<String, Integer>> entries = new ArrayList<>(map.entrySet());
@@ -289,9 +306,27 @@ public class MenuManager {
             }
             return defaults;
         });
-        Map<String, Long> times = usageTimes.computeIfAbsent(connection.playerUuid(), uuid -> new HashMap<>());
+        Map<String, Long> times = usageTimes.computeIfAbsent(connection.playerUuid(), uuid -> {
+            Map<String, Long> defaults = new HashMap<>();
+            for (String def : defaultCommands) {
+                defaults.put(def, 0L);
+            }
+            return defaults;
+        });
+        int previous = map.getOrDefault(command, 0);
         map.merge(command, 1, Integer::sum);
         times.put(command, System.currentTimeMillis());
+
+        if (!defaultCommands.contains(command) && previous == 0) {
+            for (String def : defaultCommands) {
+                Integer count = map.get(def);
+                if (count != null && count == 0) {
+                    map.remove(def);
+                    times.remove(def);
+                    break;
+                }
+            }
+        }
         cleanupUsage(connection.playerUuid(), map, times);
     }
 
@@ -376,8 +411,12 @@ public class MenuManager {
           Iterator<Map.Entry<String, Long>> iter = times.entrySet().iterator();
           while (iter.hasNext()) {
               Map.Entry<String, Long> e = iter.next();
+              String cmd = e.getKey();
+              if (defaultCommands.contains(cmd) && counts.getOrDefault(cmd, 0) == 0) {
+                  continue;
+              }
               if (now - e.getValue() > usageExpiryMillis) {
-                  counts.remove(e.getKey());
+                  counts.remove(cmd);
                   iter.remove();
               }
           }
