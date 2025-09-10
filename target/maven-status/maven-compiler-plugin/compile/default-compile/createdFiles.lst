@@ -1,0 +1,7 @@
+org\geyser\extension\bmenus\MenuManager$ArgType.class
+org\geyser\extension\bmenus\MenuManager$MenuButton.class
+org\geyser\extension\bmenus\MenuManager.class
+org\geyser\extension\bmenus\MenuManager$Menu.class
+org\geyser\extension\bmenus\BMenusExtension.class
+org\geyser\extension\bmenus\MenuManager$Argument.class
+org\geyser\extension\bmenus\MenuManager$CommandTemplate.class

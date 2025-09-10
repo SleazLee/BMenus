@@ -243,16 +243,16 @@ public class MenuManager {
             int index = 0;
             for (Argument arg : template.arguments) {
                 switch (arg.type) {
-                    case INPUT -> values.add(response.input(index));
+                    case INPUT -> values.add(response.asInput(index));
                     case DROPDOWN, PLAYER_LIST -> {
                         List<String> opts = optionLists.get(index);
-                        values.add(opts.get(response.dropdown(index)));
+                        values.add(opts.get(response.asDropdown(index)));
                     }
-                    case TOGGLE -> values.add(Boolean.toString(response.toggle(index)));
-                    case SLIDER -> values.add(Integer.toString(response.slider(index)));
+                    case TOGGLE -> values.add(Boolean.toString(response.asToggle(index)));
+                    case SLIDER -> values.add(Integer.toString((int) response.asSlider(index)));
                     case STEP_SLIDER -> {
                         List<String> opts = optionLists.get(index);
-                        values.add(opts.get(response.stepSlider(index)));
+                        values.add(opts.get(response.asStepSlider(index)));
                     }
                 }
                 index++;
