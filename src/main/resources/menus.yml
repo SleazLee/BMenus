@@ -1,17 +1,17 @@
 # BMenus configuration
 #
 # Buttons may define commands with interactive arguments using the format:
-#   command: "base {\"Title\", Type} {\"Another\", Type, \"Options\"}"
+#   command: 'base {"Title", Type} {"Another", Type, "Options"}'
 # Supported argument types:
 #   Input       - {"Prompt", Input}
 #   Dropdown    - {"Prompt", Dropdown, "Option1, Option2"}
-#   PlayerList  - {"Prompt", PlayerList}  # lists online players
+#   PLAYER_LIST - {"Prompt", PLAYER_LIST}  # lists online players
 #   Toggle      - {"Prompt", Toggle}
-#   Slider      - {"Prompt", Slider, "min, max, step"}
+#   Slider      - {"Prompt", Slider, min, max, step}
 #   StepSlider  - {"Prompt", StepSlider, "Step1, Step2"}
 #
 # Example:
-#   command: "example {\"Type Text:\", Input} {\"Who do you want?\", PlayerList} {\"True or False?\", Toggle}"
+#   command: 'example {"Type Text:", Input} {"Who do you want?", PLAYER_LIST} {"True or False?", Toggle}'
 #
 # Usage settings:
 #   flush-interval-seconds - how often command usage is saved
@@ -23,19 +23,31 @@ defaults:
   common:
     - "/spawn"
     - "/wild"
-    - "sethome {\"Home Name:\", Input}"
-    - "home {\"Home Name:\", Input}"
+    - "/back"
+    - '/sethome {"Home Name:", Input}'
+    - '/home {"Home Name:", Input}'
     - "/lands"
     - "/rankup"
-    - "vot {\"Choose an option:\", Dropdown, \"Day, Night, Clear, Sun, Raining, Thunder\"}"
+    - 'vot {"Choose an option:", Dropdown, "Day, Night, Clear, Sun, Raining, Thunder"}'
     - "/vot yes"
     - "/vot no"
-    - "/rules"
 
 usage:
   flush-interval-seconds: 300
   max-commands: 50
   expiry-seconds: 604800
+
+players:
+  # Controls how long the extension keeps a cached copy of previously
+  # fetched player names. Set to 0 to always query fresh data.
+  cache-seconds: 3
+  # Remote Java player query options live under this nested section. They
+  # can also be referenced as `players.query.*` in documentation.
+  query:
+    enabled: true
+    timeout-ms: 1500
+    retry-seconds: 30
+    # port: 25565
 
 menus:
   main:
@@ -43,27 +55,305 @@ menus:
     title: "BM Commands"
     content: "Select a category"
     buttons:
-      - text: "Teleportation"
-        menu: "teleportation"
       - text: "Common"
         menu: "common"
+      - text: "Basics"
+        menu: "basics"
+      - text: "Trophies"
+        menu: "trophies"
+      - text: "Teleportation"
+        menu: "teleportation"
+      - text: "Locations"
+        menu: "locations"
+      - text: "Fun"
+        menu: "fun"
+      - text: "MCMMO"
+        menu: "mcmmo"
+      - text: "Settings"
+        menu: "settings"
+      - text: "Abilities"
+        menu: "abilities"
+      - text: "Unlocks"
+        menu: "unlocks"
+      - text: "VIP"
+        menu: "vip"
+      - text: "BMS"
+        menu: "bms"
+      - text: "Chest Shop"
+        menu: "chestshop"
+      - text: "Lands"
+        menu: "lands"
+
+  basics:
+    type: simple
+    title: "Basics"
+    buttons:
+      - text: "Help"
+        command: "/help"
+      - text: "Abilities"
+        command: "/abilities"
+      - text: "Trash"
+        command: "/trash"
+      - text: "Playtime"
+        command: "/playtime"
+      - text: "Map"
+        command: "/map"
+      - text: "Lag"
+        command: "/lag"
+      - text: "AFK"
+        command: "/afk"
+      - text: "Vot"
+        command: 'vot {"Choose an option:", Dropdown, "Day, Night, Clear, Sun, Raining, Thunder"}'
+      - text: "Vot Yes"
+        command: "/vot yes"
+      - text: "Vot No"
+        command: "/vot no"
+      - text: "Balance"
+        command: "/balance"
+      - text: "Message Player"
+        command: '/msg {"Choose a Player:", PLAYER_LIST}'
+
+  trophies:
+    type: simple
+    title: "Trophies"
+    buttons:
+      - text: "Trophies"
+        command: "/trophies"
+      - text: "Trophy"
+        command: '/trophy {"Choose a Player:", PLAYER_LIST}'
+
   teleportation:
     type: simple
     title: "Teleportation"
     buttons:
-      - text: "spawn"
-        command: "spawn"
-      - text: "tpa"
-        command: "tpa {\"Who do you want?\", PlayerList}"
-      - text: "example"
-        command: "example {\"Type Text:\", Input} {\"Who do you want?\", PlayerList} {\"True or False?\", Toggle}"
+      - text: "Spawn"
+        command: "/spawn"
+      - text: "Back"
+        command: "/back"
+      - text: "RTP"
+        command: "/rtp"
+      - text: "TPA"
+        command: '/tpa {"Choose a Player:", PLAYER_LIST}'
+      - text: "TPA Here"
+        command: '/tpahere {"Choose a Player:", PLAYER_LIST}'
+      - text: "TP Accept"
+        command: "/tpaccept"
+      - text: "TP Deny"
+        command: "/tpdeny"
       - text: "Set Home"
-        menu: "sethome_form"
+        command: '/sethome {"Choose a home:", Slider, 1, 10, 1}'
+      - text: "Home"
+        command: '/home {"Choose a home:", Slider, 1, 10, 1}'
+      - text: "Delete Home"
+        command: '/delhome {"Choose a home:", Slider, 1, 10, 1}'
+      - text: "Public Home List"
+        command: "/publichomelist"
+      - text: "Warps"
+        command: "/warps"
+
+  locations:
+    type: simple
+    title: "Locations"
+    buttons:
+      - text: "Rules"
+        command: "/rules"
+      - text: "Vote Shop"
+        command: "/voteshop"
+      - text: "Healing Springs"
+        command: "/healingsprings"
+      - text: "Wishing Well"
+        command: "/wishingwell"
+      - text: "Obelisk"
+        command: "/obelisk"
+
+  fun:
+    type: simple
+    title: "Fun"
+    buttons:
+      - text: "Sit"
+        command: "/sit"
+      - text: "Crawl"
+        command: "/crawl"
+      - text: "Belly Flop"
+        command: "/bellyflop"
+
+  mcmmo:
+    type: simple
+    title: "MCMMO"
+    buttons:
+      - text: "Inspect"
+        command: '/inspect {"Choose a Player:", PLAYER_LIST}'
+      - text: "MC Ability"
+        command: "/mcability"
+      - text: "MC Cooldown"
+        command: "/mccooldown"
+      - text: "MC Rank"
+        command: '/mcrank {"Choose a Player:", PLAYER_LIST}'
+      - text: "MC Top"
+        command: '/mctop {"Choose a Skill:", Dropdown, "ACROBATICS, ALCHEMY, ARCHERY, AXES, CROSSBOWS, EXCAVATION, FISHING, HERBALISM, MACES, MINING, REPAIR, SALVAGE, SMELTING, SWORDS, TAMING, TRIDENTS, UNARMED, WOODCUTTING"}'
+      - text: "Notify"
+        command: "/notify"
+      - text: "Stats"
+        command: "/stats"
+      - text: "XP Bar Settings"
+        command: "/xpbarsettings"
+
+  settings:
+    type: simple
+    title: "Settings"
+    buttons:
+      - text: "Tree Assist"
+        command: "/treeassist"
+      - text: "Auto Sit"
+        command: "/autosit"
+      - text: "TPA Ignore"
+        command: "/tpaignore"
+      - text: "Map Toggle"
+        command: "/maptoggle"
+
+  abilities:
+    type: simple
+    title: "Abilities"
+    buttons:
+      - text: "Chest Sort"
+        command: "/chestsort"
+      - text: "Auto Add"
+        command: "/autoadd"
+      - text: "Best Tool"
+        command: "/besttool"
+      - text: "Nick"
+        command: "/nick"
+      - text: "Auto Shulker"
+        command: "/autoshulker"
+
+  unlocks:
+    type: simple
+    title: "Unlocks"
+    buttons:
+      - text: "Donate"
+        command: "/donate"
+      - text: "Craft"
+        command: "/craft"
+      - text: "Ender Chest"
+        command: "/echest"
+      - text: "Cartography"
+        command: "/cartography"
+      - text: "Loom"
+        command: "/loom"
+      - text: "Stonecutter"
+        command: "/stonecutter"
+      - text: "Smithing"
+        command: "/smithing"
+      - text: "Anvil"
+        command: "/anvil"
+
+  vip:
+    type: simple
+    title: "VIP"
+    buttons:
+      - text: "VIP"
+        command: "/vip"
+      - text: "Death"
+        command: "/death"
+      - text: "Balloons"
+        command: "/balloons"
+      - text: "Pets"
+        command: "/pets"
+      - text: "Music"
+        command: "/music"
+      - text: "Arrow"
+        command: "/arrow"
+      - text: "Particles"
+        command: "/particles"
+      - text: "Gadgets"
+        command: "/gadgets"
+      - text: "Morphs"
+        command: "/morphs"
+      - text: "Mounts"
+        command: "/mounts"
+
+  bms:
+    type: simple
+    title: "BMS"
+    buttons:
+      - text: "BMS Buy"
+        command: "/bms buy"
+      - text: "BMS Extend"
+        command: "/bms extend"
+      - text: "BMS Accept"
+        command: "/bms accept"
+      - text: "BMS Decline"
+        command: "/bms decline"
+      - text: "BMS TP"
+        command: '/bms tp {"Shop Name:", Input}'
+      - text: "BMS TP Set"
+        command: "/bms tp set"
+      - text: "BMS Name Set"
+        command: '/bms name set {"Shop Name:", Input}'
+      - text: "BMS Name Color"
+        command: '/bms name color {"Choose a Color:", Dropdown, "aqua, black, blue, dark_aqua, dark_blue, dark_gray, dark_green, dark_purple, dark_red, gold, gray, green, light_purple, red, RESET, white, yellow"}'
+      - text: "BMS Name Hex"
+        command: '/bms name hex {"Hex Color Code:", Input}'
+      - text: "BMS Invite"
+        command: '/bms invite {"Choose a Player:", PLAYER_LIST}'
+      - text: "BMS Remove"
+        command: '/bms remove {"Choose a Player:", PLAYER_LIST}'
+      - text: "BMS Transfer"
+        command: '/bms transfer {"Choose a Player:", PLAYER_LIST}'
+      - text: "BMS Disband"
+        command: "/bms disband"
+
+  chestshop:
+    type: simple
+    title: "Chest Shop"
+    buttons:
+      - text: "Shop Buy"
+        command: "/shop buy"
+      - text: "Shop Sell"
+        command: "/shop sell"
+      - text: "Shop Price"
+        command: '/shop price {"Enter Amount:", Input}'
+      - text: "Shop Remove"
+        command: "/shop remove"
+      - text: "Shop Item"
+        command: "/shop item"
+
+  lands:
+    type: simple
+    title: "Lands"
+    buttons:
+      - text: "L"
+        command: "/l"
+      - text: "L Create"
+        command: '/l create {"Enter the Land Name:", Input}'
+      - text: "L Claim"
+        command: "/l claim"
+      - text: "L Spawn"
+        command: "/l spawn"
+      - text: "L Unclaim"
+        command: "/l unclaim"
+      - text: "L Accept"
+        command: "/l accept"
+      - text: "L Deny"
+        command: "/l deny"
+      - text: "L Leave"
+        command: "/l leave"
+      - text: "L Invites"
+        command: "/l invites"
+      - text: "L Map"
+        command: "/l map"
+      - text: "L Set Spawn"
+        command: "/l setspawn"
+      - text: "L View"
+        command: "/l view"
+      - text: "L Set Owner"
+        command: '/l setowner {"Choose a Player:", Input} {"Confirm?", Dropdown, "Deny, Confirm"}'
+      - text: "L Set Role"
+        command: '/l setrole {"Choose a Player:", Input} {"Choose Role:", Dropdown, "Default, *"}'
+      - text: "L Storage"
+        command: "/l storage"
+
   common:
     type: simple
     title: "Common"
     buttons: []
-  sethome_form:
-    type: custom
-    title: "Set Home"
-    command: "sethome {\"Home Name:\", Input}"

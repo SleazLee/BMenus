@@ -5,3 +5,4 @@ org\geyser\extension\bmenus\MenuManager$Menu.class
 org\geyser\extension\bmenus\BMenusExtension.class
 org\geyser\extension\bmenus\MenuManager$Argument.class
 org\geyser\extension\bmenus\MenuManager$CommandTemplate.class
+org\geyser\extension\bmenus\MenuManager$QueryState.class

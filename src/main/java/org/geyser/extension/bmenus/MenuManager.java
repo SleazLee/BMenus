@@ -5,12 +5,18 @@ import org.geysermc.cumulus.form.SimpleForm;
 import org.geysermc.geyser.api.GeyserApi;
 import org.geysermc.geyser.api.connection.GeyserConnection;
 import org.geysermc.geyser.api.extension.Extension;
+import org.geysermc.geyser.api.network.RemoteServer;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.io.Writer;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -29,6 +35,25 @@ public class MenuManager {
     private final Map<UUID, Map<String, Long>> usageTimes = new HashMap<>();
     private final Path usagePath;
     private List<String> defaultCommands = new ArrayList<>();
+
+    private enum QueryState {
+        UNKNOWN,
+        ENABLED,
+        UNAVAILABLE,
+        DISABLED
+    }
+
+    private final Object playerListLock = new Object();
+    private volatile List<String> playerListCache = Collections.emptyList();
+    private volatile long playerListCacheTime = 0L;
+    private long playerCacheDurationMillis = TimeUnit.SECONDS.toMillis(3);
+    private QueryState queryState = QueryState.UNKNOWN;
+    private boolean queryExplicitlyDisabled = false;
+    private int queryPortOverride = -1;
+    private int queryTimeoutMillis = 1500;
+    private long queryRetryDelayMillis = TimeUnit.SECONDS.toMillis(30);
+    private long nextQueryAttemptMillis = 0L;
+    private boolean queryFailureLogged = false;
 
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     private ScheduledFuture<?> saveTask;
@@ -73,6 +98,7 @@ public class MenuManager {
                         break;
                     }
                 }
+
             }
 
             Map<String, Object> defaults = (Map<String, Object>) root.get("defaults");
@@ -98,6 +124,9 @@ public class MenuManager {
                     usageExpiryMillis = expiry.longValue() * 1000L;
                 }
             }
+
+            Map<String, Object> playersCfg = (Map<String, Object>) root.get("players");
+            configurePlayerSources(playersCfg);
         } catch (IOException e) {
             extension.logger().error("Unable to load menus.yml", e);
         }
@@ -118,6 +147,68 @@ public class MenuManager {
             extension.logger().error("Unable to save default menus.yml", e);
         }
     }
+
+    private void configurePlayerSources(Map<String, Object> config) {
+        playerListCache = Collections.emptyList();
+        playerListCacheTime = 0L;
+        nextQueryAttemptMillis = 0L;
+        queryFailureLogged = false;
+
+        playerCacheDurationMillis = TimeUnit.SECONDS.toMillis(3);
+        queryTimeoutMillis = 1500;
+        queryRetryDelayMillis = TimeUnit.SECONDS.toMillis(30);
+        queryPortOverride = -1;
+        queryExplicitlyDisabled = false;
+        queryState = QueryState.UNKNOWN;
+
+        if (config == null) {
+            return;
+        }
+
+        Object cacheObj = config.get("cache-seconds");
+        if (cacheObj instanceof Number number) {
+            long seconds = number.longValue();
+            if (seconds < 0) {
+                seconds = 0;
+            }
+            playerCacheDurationMillis = TimeUnit.SECONDS.toMillis(seconds);
+        }
+
+        Object queryObj = config.get("query");
+        if (queryObj instanceof Map<?, ?> rawMap) {
+            Map<?, ?> queryMap = rawMap;
+
+            Object enabledObj = queryMap.get("enabled");
+            if (enabledObj instanceof Boolean bool) {
+                queryExplicitlyDisabled = !bool;
+                queryState = bool ? QueryState.UNKNOWN : QueryState.DISABLED;
+            }
+
+            Object portObj = queryMap.get("port");
+            if (portObj instanceof Number number) {
+                int port = number.intValue();
+                queryPortOverride = port > 0 ? port : -1;
+            }
+
+            Object timeoutObj = queryMap.get("timeout-ms");
+            if (timeoutObj instanceof Number number) {
+                int timeout = number.intValue();
+                if (timeout > 0) {
+                    queryTimeoutMillis = timeout;
+                }
+            }
+
+            Object retryObj = queryMap.get("retry-seconds");
+            if (retryObj instanceof Number number) {
+                long seconds = number.longValue();
+                if (seconds < 0) {
+                    seconds = 0;
+                }
+                queryRetryDelayMillis = TimeUnit.SECONDS.toMillis(seconds);
+            }
+        }
+    }
+
 
     /**
      * Opens a menu with the given id for the player.
@@ -283,12 +374,206 @@ public class MenuManager {
     }
 
     private List<String> getOnlinePlayerNames() {
-        GeyserApi api = extension.geyserApi();
-        List<String> names = new ArrayList<>();
-        for (GeyserConnection online : api.onlineConnections()) {
+        long now = System.currentTimeMillis();
+        if (now - playerListCacheTime < playerCacheDurationMillis) {
+            return new ArrayList<>(playerListCache);
+        }
+
+        synchronized (playerListLock) {
+            now = System.currentTimeMillis();
+            if (now - playerListCacheTime >= playerCacheDurationMillis) {
+                List<String> refreshed = refreshPlayerNames();
+                playerListCache = refreshed;
+                playerListCacheTime = now;
+            }
+            return new ArrayList<>(playerListCache);
+        }
+    }
+
+    private List<String> refreshPlayerNames() {
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        for (GeyserConnection online : extension.geyserApi().onlineConnections()) {
             names.add(online.name());
         }
-        return names;
+
+        if (shouldAttemptQuery()) {
+            try {
+                List<String> javaPlayers = queryRemotePlayerNames();
+                names.addAll(javaPlayers);
+                queryState = QueryState.ENABLED;
+                queryFailureLogged = false;
+                nextQueryAttemptMillis = 0L;
+            } catch (IOException e) {
+                if (!queryFailureLogged) {
+                    extension.logger().warning("Unable to query remote server for player list: " + e.getMessage());
+                    queryFailureLogged = true;
+                } else if (extension.logger().isDebug()) {
+                    extension.logger().debug("Unable to query remote server for player list: " + e.getMessage());
+                }
+                queryState = QueryState.UNAVAILABLE;
+                nextQueryAttemptMillis = System.currentTimeMillis() + queryRetryDelayMillis;
+            }
+        }
+
+        List<String> result = new ArrayList<>(names);
+        result.sort(String.CASE_INSENSITIVE_ORDER);
+        return result;
+    }
+
+    private boolean shouldAttemptQuery() {
+        if (queryState == QueryState.DISABLED || queryExplicitlyDisabled) {
+            return false;
+        }
+        if (queryState == QueryState.UNAVAILABLE) {
+            long now = System.currentTimeMillis();
+            if (now < nextQueryAttemptMillis) {
+                return false;
+            }
+            queryState = QueryState.UNKNOWN;
+        }
+        return true;
+    }
+
+    private List<String> queryRemotePlayerNames() throws IOException {
+        RemoteServer remote = extension.geyserApi().defaultRemoteServer();
+        if (remote == null) {
+            return Collections.emptyList();
+        }
+
+        String host = remote.address();
+        int port = queryPortOverride > 0 ? queryPortOverride : remote.port();
+        InetAddress address = InetAddress.getByName(host);
+
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.setSoTimeout(queryTimeoutMillis);
+
+            int sessionId = ThreadLocalRandom.current().nextInt();
+            byte[] handshake = createHandshake(sessionId);
+            socket.send(new DatagramPacket(handshake, handshake.length, address, port));
+
+            DatagramPacket response = new DatagramPacket(new byte[128], 128);
+            socket.receive(response);
+
+            ByteBuffer handshakeBuffer = ByteBuffer.wrap(response.getData(), 0, response.getLength());
+            if (!handshakeBuffer.hasRemaining() || handshakeBuffer.get() != (byte) 0x09) {
+                throw new IOException("Invalid handshake response");
+            }
+            if (handshakeBuffer.remaining() < 4) {
+                throw new IOException("Incomplete handshake response");
+            }
+            int responseSessionId = handshakeBuffer.getInt();
+            if (responseSessionId != sessionId) {
+                throw new IOException("Session ID mismatch");
+            }
+            String challenge = readNullTerminatedString(handshakeBuffer);
+            int challengeToken;
+            try {
+                challengeToken = Integer.parseInt(challenge.trim());
+            } catch (NumberFormatException e) {
+                throw new IOException("Invalid challenge token: " + challenge, e);
+            }
+
+            byte[] statRequest = createStatRequest(sessionId, challengeToken);
+            socket.send(new DatagramPacket(statRequest, statRequest.length, address, port));
+
+            DatagramPacket statPacket = new DatagramPacket(new byte[4096], 4096);
+            socket.receive(statPacket);
+            byte[] statData = Arrays.copyOf(statPacket.getData(), statPacket.getLength());
+            return extractPlayersFromStat(statData);
+        }
+    }
+
+    private byte[] createHandshake(int sessionId) {
+        ByteBuffer buffer = ByteBuffer.allocate(7);
+        buffer.put((byte) 0xFE);
+        buffer.put((byte) 0xFD);
+        buffer.put((byte) 0x09);
+        buffer.putInt(sessionId);
+        return buffer.array();
+    }
+
+    private byte[] createStatRequest(int sessionId, int challengeToken) {
+        ByteBuffer buffer = ByteBuffer.allocate(15);
+        buffer.put((byte) 0xFE);
+        buffer.put((byte) 0xFD);
+        buffer.put((byte) 0x00);
+        buffer.putInt(sessionId);
+        buffer.putInt(challengeToken);
+        buffer.putInt(0);
+        return buffer.array();
+    }
+
+    private String readNullTerminatedString(ByteBuffer buffer) {
+        StringBuilder builder = new StringBuilder();
+        while (buffer.hasRemaining()) {
+            byte value = buffer.get();
+            if (value == 0) {
+                break;
+            }
+            builder.append((char) (value & 0xFF));
+        }
+        return builder.toString();
+    }
+
+    private List<String> extractPlayersFromStat(byte[] data) {
+        if (data.length <= 5) {
+            return Collections.emptyList();
+        }
+
+        int offset = 5;
+        List<String> segments = new ArrayList<>();
+        int start = offset;
+        for (int i = offset; i < data.length; i++) {
+            if (data[i] == 0) {
+                segments.add(new String(data, start, i - start, StandardCharsets.UTF_8));
+                start = i + 1;
+            }
+        }
+        if (start < data.length) {
+            segments.add(new String(data, start, data.length - start, StandardCharsets.UTF_8));
+        }
+
+        int playerIndex = -1;
+        for (int i = 0; i < segments.size(); i++) {
+            String value = sanitizeSegment(segments.get(i));
+            if ("player_".equals(value)) {
+                playerIndex = i;
+                break;
+            }
+        }
+
+        if (playerIndex == -1) {
+            return Collections.emptyList();
+        }
+
+        int index = playerIndex + 1;
+        while (index < segments.size() && sanitizeSegment(segments.get(index)).isEmpty()) {
+            index++;
+        }
+
+        List<String> players = new ArrayList<>();
+        for (; index < segments.size(); index++) {
+            String player = sanitizeSegment(segments.get(index));
+            if (player.isEmpty()) {
+                break;
+            }
+            players.add(player);
+        }
+        return players;
+    }
+
+    private String sanitizeSegment(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        int start = 0;
+        while (start < value.length() && (value.charAt(start) == 0 || value.charAt(start) == 1)) {
+            start++;
+        }
+        if (start >= value.length()) {
+            return "";
+        }
+        return value.substring(start);
     }
 
     private void execute(GeyserConnection connection, String command) {
