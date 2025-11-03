@@ -690,32 +690,92 @@ public class MenuManager {
         saveTask = executor.scheduleAtFixedRate(this::saveUsage, saveIntervalSeconds, saveIntervalSeconds, TimeUnit.SECONDS);
     }
 
-      private void cleanupUsage(UUID uuid, Map<String, Integer> counts, Map<String, Long> times) {
-          // uuid currently unused but kept for potential future per-player operations
-          long now = System.currentTimeMillis();
-          Iterator<Map.Entry<String, Long>> iter = times.entrySet().iterator();
-          while (iter.hasNext()) {
-              Map.Entry<String, Long> e = iter.next();
-              String cmd = e.getKey();
-              if (defaultCommands.contains(cmd) && counts.getOrDefault(cmd, 0) == 0) {
-                  continue;
-              }
-              if (now - e.getValue() > usageExpiryMillis) {
-                  counts.remove(cmd);
-                  iter.remove();
-              }
-          }
-          if (counts.size() > maxCommands) {
-              List<Map.Entry<String, Integer>> entries = new ArrayList<>(counts.entrySet());
-              entries.sort(Map.Entry.comparingByValue());
-              int toRemove = counts.size() - maxCommands;
-              for (int i = 0; i < toRemove; i++) {
-                  String cmd = entries.get(i).getKey();
-                  counts.remove(cmd);
-                  times.remove(cmd);
-              }
-          }
-      }
+    private void cleanupUsage(UUID uuid, Map<String, Integer> counts, Map<String, Long> times) {
+        // uuid currently unused but kept for potential future per-player operations
+        long now = System.currentTimeMillis();
+        Iterator<Map.Entry<String, Long>> iter = times.entrySet().iterator();
+        while (iter.hasNext()) {
+            Map.Entry<String, Long> entry = iter.next();
+            String command = entry.getKey();
+            if (defaultCommands.contains(command) && counts.getOrDefault(command, 0) == 0) {
+                continue;
+            }
+            if (now - entry.getValue() > usageExpiryMillis) {
+                counts.remove(command);
+                iter.remove();
+            }
+        }
+
+        trimToMax(counts, times);
+        ensureDefaultTimes(counts, times);
+        ensureDefaultEntries(counts, times);
+    }
+
+    private void trimToMax(Map<String, Integer> counts, Map<String, Long> times) {
+        if (counts.size() <= maxCommands) {
+            return;
+        }
+
+        List<String> commands = new ArrayList<>(counts.keySet());
+        commands.sort((a, b) -> {
+            int countCompare = Integer.compare(counts.getOrDefault(a, 0), counts.getOrDefault(b, 0));
+            if (countCompare != 0) {
+                return countCompare;
+            }
+
+            long timeA = times.getOrDefault(a, 0L);
+            long timeB = times.getOrDefault(b, 0L);
+            int timeCompare = Long.compare(timeA, timeB);
+            if (timeCompare != 0) {
+                return timeCompare;
+            }
+
+            boolean aDefault = defaultCommands.contains(a);
+            boolean bDefault = defaultCommands.contains(b);
+            if (aDefault != bDefault) {
+                return aDefault ? 1 : -1;
+            }
+
+            return a.compareTo(b);
+        });
+
+        int toRemove = counts.size() - maxCommands;
+        for (String command : commands) {
+            if (toRemove <= 0) {
+                break;
+            }
+            counts.remove(command);
+            times.remove(command);
+            toRemove--;
+        }
+    }
+
+    private void ensureDefaultTimes(Map<String, Integer> counts, Map<String, Long> times) {
+        for (String command : defaultCommands) {
+            if (counts.containsKey(command)) {
+                times.putIfAbsent(command, 0L);
+            }
+        }
+    }
+
+    private void ensureDefaultEntries(Map<String, Integer> counts, Map<String, Long> times) {
+        if (counts.size() >= maxCommands) {
+            return;
+        }
+
+        for (String command : defaultCommands) {
+            if (counts.containsKey(command)) {
+                continue;
+            }
+
+            counts.put(command, 0);
+            times.put(command, 0L);
+
+            if (counts.size() >= maxCommands) {
+                break;
+            }
+        }
+    }
 
     void shutdown() {
         saveUsage();
