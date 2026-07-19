@@ -23,14 +23,14 @@ defaults:
   common:
     - "/spawn"
     - "/wild"
-    - 'sethome {"Home Name:", Input}'
-    - 'home {"Home Name:", Input}'
+    - "/back"
+    - '/sethome {"Home Name:", Input}'
+    - '/home {"Home Name:", Input}'
     - "/lands"
     - "/rankup"
     - 'vot {"Choose an option:", Dropdown, "Day, Night, Clear, Sun, Raining, Thunder"}'
     - "/vot yes"
     - "/vot no"
-    - "/rules"
 
 usage:
   flush-interval-seconds: 300
@@ -103,7 +103,11 @@ menus:
       - text: "AFK"
         command: "/afk"
       - text: "Vot"
-        command: "/vot"
+        command: 'vot {"Choose an option:", Dropdown, "Day, Night, Clear, Sun, Raining, Thunder"}'
+      - text: "Vot Yes"
+        command: "/vot yes"
+      - text: "Vot No"
+        command: "/vot no"
       - text: "Balance"
         command: "/balance"
       - text: "Message Player"
